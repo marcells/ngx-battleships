@@ -2,10 +2,14 @@ import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { FormArray, FormBuilder, FormControl, FormGroup } from '@angular/forms';
 import { Observable } from 'rxjs/Observable';
 import { combineLatest } from 'rxjs/observable/combineLatest';
-import { map } from 'rxjs/operators';
+import { map, tap } from 'rxjs/operators';
 
 import { Coordinate, Warhsip, WarshipSkeleton } from '../../../lib/battleships';
 import { BattleFieldPosition, IProvideWarshipPlan } from '../../../lib/battleships/contracts';
+import { Store, select } from '@ngrx/store';
+import { ChooseWarshipPlan, UpdateWarshipPositions } from '../../actions/harbour.actions';
+
+import * as fromHarbour from '../../reducers';
 
 @Component({
   selector: 'bs-craft-warship',
@@ -34,11 +38,21 @@ export class CraftWarshipComponent implements OnInit {
     );
   }
 
-  constructor(private _fb: FormBuilder) {
+  constructor(private _fb: FormBuilder, private _store: Store<fromHarbour.State>) {
+    this._store.select(s => s).subscribe(x =>  console.log(x.harbour.warshipPlan));
+
     this.warshipForm = this._provideCoordinateForm();
   }
 
-  ngOnInit(): void {}
+  ngOnInit(): void {
+    this.warshipPlan$ = this._store.pipe(
+      select(fromHarbour.all),
+      tap(all => {
+        this.updateCoordinatesForm(all.plan);
+        this._fillCoordinateForm(all.currentPosition)
+      }),
+    map(all => all.plan));
+  }
 
   updateCoordinatesForm(selectedPlan: IProvideWarshipPlan) {
     const coordinates = this.warshipForm.get('coordinates') as FormArray;
@@ -46,14 +60,12 @@ export class CraftWarshipComponent implements OnInit {
 
     combineLatest(coordinates.controls.map(c => c.valueChanges))
       .pipe(map(() => this._enteredCoodinates))
-      .subscribe(
-        positions => console.log(positions) /* update coordinates in store */
-      );
+      .subscribe(positions => this._store.dispatch(new UpdateWarshipPositions(positions)));
   }
 
-  changeWharshipPlan(shipSkeleton: WarshipSkeleton) {
-    this.updateCoordinatesForm(shipSkeleton);
-    /** change warship plan in store */
+  changeWharshipPlan(warshipPlan: WarshipSkeleton) {
+    this.updateCoordinatesForm(warshipPlan);
+    this._store.dispatch(new ChooseWarshipPlan(warshipPlan));
   }
 
   craftWarship() {
